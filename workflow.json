@@ -1,0 +1,280 @@
+{
+  "name": "Green claims checker (EN→HR, EU 2024/825)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9ca09b88-2b6b-555a-beac-04a4ebb8f58a",
+      "name": "Run test set",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Synthetic EN→HR test set (heating / appliance content). No client text.\n// expected: verdicts accepted as correct for this segment.\nconst segments = [\n  { id: 'S01', source: 'Connect the green/yellow earth wire to terminal PE.', target: 'Spojite zeleno-žutu žicu uzemljenja na stezaljku PE.', expected: ['OK'], note: 'green as colour (earth wire)' },\n  { id: 'S02', source: 'The green LED lights up when the unit is ready.', target: 'Zelena LED dioda svijetli kada je uređaj spreman.', expected: ['OK'], note: 'green as colour (LED)' },\n  { id: 'S03', source: 'Replace the carbon filter every six months.', target: 'Zamijenite ugljeni filtar svakih šest mjeseci.', expected: ['OK'], note: 'carbon = component' },\n  { id: 'S04', source: 'Energy label class A+++ (35 °C application).', target: 'Razred energetske oznake A+++ (primjena pri 35 °C).', expected: ['OK'], note: 'regulated label class' },\n  { id: 'S05', source: 'Uses the natural refrigerant R290.', target: 'Koristi prirodno rashladno sredstvo R290.', expected: ['OK'], note: 'technical term' },\n  { id: 'S06', source: 'Our most eco-friendly heat pump ever.', target: 'Naša ekološki najprihvatljivija dizalica topline dosad.', expected: ['FLAG'], note: 'generic claim' },\n  { id: 'S07', source: 'Carbon neutral heating for your home.', target: 'Ugljično neutralno grijanje za vaš dom.', expected: ['FLAG'], note: 'neutrality claim' },\n  { id: 'S08', source: 'The most energy-efficient heat pump on the market.', target: 'Energetski najučinkovitija dizalica topline na tržištu.', expected: ['FLAG'], note: 'unsubstantiated superlative' },\n  { id: 'S09', source: 'Sustainable comfort all year round.', target: 'Održiva udobnost tijekom cijele godine.', expected: ['FLAG'], note: 'generic claim' },\n  { id: 'S10', source: 'Climate-friendly technology for every home.', target: 'Klimatski prihvatljiva tehnologija za svaki dom.', expected: ['FLAG'], note: 'generic claim' },\n  { id: 'S11', source: 'Delivered in biodegradable packaging.', target: 'Isporučuje se u biorazgradivoj ambalaži.', expected: ['REVIEW'], note: 'specific claim, needs evidence' },\n  { id: 'S12', source: 'Reduces CO2 emissions by up to 40% compared to a gas boiler (EN 14825 test conditions).', target: 'Smanjuje emisije CO2 do 40 % u usporedbi s plinskim kotlom (uvjeti ispitivanja prema EN 14825).', expected: ['REVIEW'], note: 'specific, quantified claim' },\n  { id: 'S13', source: 'Environmentally friendly operation.', target: 'Rad prihvatljiv za okoliš.', expected: ['FLAG'], note: 'generic claim, split phrase in HR' },\n  { id: 'S14', source: 'Quiet operation at 35 dB(A).', target: 'Tihi rad pri 35 dB(A).', expected: ['OK'], note: 'no claim' },\n  { id: 'S15', source: 'Efficient operation in cold climates.', target: 'Ekološki učinkovit rad u hladnim klimama.', expected: ['FLAG'], note: 'claim introduced by translation' },\n  { id: 'S16', source: 'Designed for a long service life.', target: 'Dizajniran za dug vijek trajanja i održivost.', expected: ['FLAG'], note: 'claim introduced by translation' },\n  { id: 'S17', source: 'Complies with the ecodesign requirements of Regulation (EU) No 813/2013.', target: 'Usklađen sa zahtjevima za ekološki dizajn iz Uredbe (EU) br. 813/2013.', expected: ['OK'], note: 'regulatory term' },\n  { id: 'S18', source: 'Green energy from your own solar panels.', target: 'Zelena energija iz vlastitih solarnih panela.', expected: ['FLAG', 'REVIEW'], note: 'green as environmental, borderline' },\n  { id: 'S19', source: 'A green solution for modern homes.', target: 'Zeleno rješenje za moderne domove.', expected: ['FLAG'], note: 'green as environmental' },\n  { id: 'S20', source: 'Available in white, black and green.', target: 'Dostupno u bijeloj, crnoj i zelenoj boji.', expected: ['OK'], note: 'green as colour, needs context' },\n  { id: 'S21', source: 'Housing made with 30% recycled plastic.', target: 'Kućište izrađeno s 30 % reciklirane plastike.', expected: ['REVIEW'], note: 'specific claim, needs evidence' },\n];\nreturn segments.map(s => ({ json: s }));\n"
+      },
+      "id": "cb4e3c58-6e8b-5995-b059-fa76317b165c",
+      "name": "Test segments (EN→HR)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rule engine: EN source + HR target. Croatian inflection via stems + Unicode letter boundaries.\n// FLAG = generic/neutrality/superlative claim, or any claim introduced by the translation.\n// AMBIGUOUS = needs context (green, recycled, emissions...) -> local LLM.\nconst B = '(?<![\\\\p{L}\\\\p{N}])';   // left word boundary (Unicode-aware)\nconst E = '(?![\\\\p{L}\\\\p{N}])';    // right word boundary\nconst rx = s => new RegExp(B + s + E, 'giu');\nconst stem = s => new RegExp(B + s + '\\\\p{L}*' + E, 'giu');\n\nconst ALLOW = {\n  en: [/carbon filters?/giu, /green[\\/-]yellow/giu, /green LEDs?/giu, /energy (label|efficiency) class/giu,\n       /natural refrigerants?/giu, /eco-?design/giu],\n  hr: [stem('ugljeni filt'), stem('ugljični filt'), new RegExp(B + 'zeleno-žut\\\\p{L}*', 'giu'),\n       new RegExp(B + 'zelen\\\\p{L}* LED', 'giu'), new RegExp(B + 'energetsk\\\\p{L}* oznak\\\\p{L}*', 'giu'),\n       new RegExp(B + 'prirodn\\\\p{L}* rashladn\\\\p{L}*', 'giu'), new RegExp(B + 'ekološk\\\\p{L}* dizajn\\\\p{L}*', 'giu')],\n};\n\nconst RULES = {\n  en: [\n    { re: rx('eco-?friendly|environment(ally)?[ -]friendly|climate[ -]friendly|planet[ -]friendly'), level: 'flag', type: 'generic' },\n    { re: rx('(carbon|climate|CO2)[ -]neutral(ity)?|net[ -]zero'), level: 'flag', type: 'neutrality' },\n    { re: stem('sustainab'), level: 'flag', type: 'generic' },\n    { re: rx('most (eco-?friendly|energy[ -]efficient|efficient|sustainable)'), level: 'flag', type: 'superlative' },\n    { re: rx('green (solution|technology|choice|product|future|home)s?'), level: 'flag', type: 'generic' },\n    { re: rx('green'), level: 'review', type: 'green' },\n    { re: stem('biodegrad'), level: 'review', type: 'specific' },\n    { re: stem('recycl'), level: 'review', type: 'specific' },\n    { re: rx('(CO2|carbon) emissions?|reduces? emissions'), level: 'review', type: 'specific' },\n  ],\n  hr: [\n    { re: new RegExp(B + 'prihvatljiv\\\\p{L}* za okoliš' + E, 'giu'), level: 'flag', type: 'generic' },\n    { re: stem('ekološk'), level: 'flag', type: 'generic' },\n    { re: new RegExp(B + 'klimatsk\\\\p{L}* (prihvatljiv|neutraln)\\\\p{L}*', 'giu'), level: 'flag', type: 'generic' },\n    { re: new RegExp(B + '(ugljičn|CO2[ -]?)\\\\p{L}* ?neutraln\\\\p{L}*', 'giu'), level: 'flag', type: 'neutrality' },\n    { re: stem('održiv'), level: 'flag', type: 'generic' },\n    { re: stem('najučinkovitij'), level: 'flag', type: 'superlative' },\n    { re: new RegExp(B + 'zelen\\\\p{L}* (rješenj|tehnologij|izbor|budućnost|dom)\\\\p{L}*', 'giu'), level: 'flag', type: 'generic' },\n    { re: stem('zelen'), level: 'review', type: 'green' },\n    { re: stem('biorazgradiv'), level: 'review', type: 'specific' },\n    { re: stem('recikl'), level: 'review', type: 'specific' },\n    { re: new RegExp(B + 'emisij\\\\p{L}*', 'giu'), level: 'review', type: 'specific' },\n  ],\n};\n\nfunction scan(text, lang) {\n  let t = text;\n  for (const a of ALLOW[lang]) t = t.replace(a, m => ' '.repeat(m.length)); // mask allow-listed spans\n  const hits = [];\n  const taken = [];\n  for (const r of RULES[lang]) {\n    for (const m of t.matchAll(r.re)) {\n      const s = m.index, e = s + m[0].length;\n      if (taken.some(([a, b]) => s < b && e > a)) continue; // a stronger rule already covered this span\n      taken.push([s, e]);\n      hits.push({ term: m[0], level: r.level, type: r.type });\n    }\n  }\n  return hits;\n}\n\nreturn $input.all().map(item => {\n  const seg = item.json;\n  const src = scan(seg.source, 'en');\n  const tgt = scan(seg.target, 'hr');\n  let ruleVerdict, reason;\n  if (tgt.length && !src.length) {\n    ruleVerdict = 'FLAG';\n    reason = 'Claim introduced by the translation: ' + tgt.map(h => h.term).join(', ');\n  } else if ([...src, ...tgt].some(h => h.level === 'flag')) {\n    ruleVerdict = 'FLAG';\n    reason = 'Rule match: ' + [...src, ...tgt].filter(h => h.level === 'flag').map(h => `${h.term} (${h.type})`).join(', ');\n  } else if (src.length || tgt.length) {\n    ruleVerdict = 'AMBIGUOUS';\n    reason = 'Needs context: ' + [...src, ...tgt].map(h => h.term).join(', ');\n  } else {\n    ruleVerdict = 'OK';\n    reason = 'No claim terms after allow-list';\n  }\n  const out = { ...seg, sourceHits: src, targetHits: tgt, ruleVerdict, reason };\n  if (ruleVerdict === 'AMBIGUOUS') {\n    out.llmPrompt = [\n      'You check product content against EU Directive 2024/825 (empowering consumers for the green transition).',\n      'Classify the segment below. Answer with JSON only: {\"verdict\": \"NO_CLAIM\" | \"GENERIC_CLAIM\" | \"SPECIFIC_CLAIM\", \"reason\": \"one short sentence\"}.',\n      'NO_CLAIM: no environmental claim, for example \"green\" used only as a colour, or a technical term.',\n      'GENERIC_CLAIM: a vague environmental benefit without specific, verifiable content, for example \"green energy\", \"eco\", \"environmentally friendly\".',\n      'SPECIFIC_CLAIM: a concrete environmental claim (percentages, materials, test standards) that must be backed by evidence.',\n      'Terms that triggered this check: ' + [...src, ...tgt].map(h => h.term).join(', '),\n      'English source: ' + seg.source,\n      'Croatian target: ' + seg.target,\n    ].join('\\n');\n  }\n  return { json: out };\n});\n"
+      },
+      "id": "71653505-c9ef-572f-9600-1aa3853e3daf",
+      "name": "Rule engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.ruleVerdict }}",
+              "rightValue": "AMBIGUOUS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f2facae8-d6e9-5ade-81e4-5b5c16a65ac4",
+      "name": "Ambiguous?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gemma3:12b', prompt: $json.llmPrompt, stream: false, format: 'json', options: { temperature: 0 } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "c3359181-22d3-5d7f-8806-083983a0ba3a",
+      "name": "Local LLM (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "9f5821d0-12ab-5eca-8e25-aba84662e236",
+      "name": "Attach LLM answer",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map the local LLM answer to a final verdict. Anything unparseable goes to human review.\nconst MAP = { NO_CLAIM: 'OK', GENERIC_CLAIM: 'FLAG', SPECIFIC_CLAIM: 'REVIEW' };\nreturn $input.all().map(item => {\n  const j = item.json;\n  let llm = null;\n  try { llm = JSON.parse(j.response); } catch (e) { llm = null; }\n  const v = llm && MAP[llm.verdict];\n  const { response, model, created_at, done, done_reason, context, total_duration, load_duration,\n          prompt_eval_count, prompt_eval_duration, eval_count, eval_duration, llmPrompt, ...rest } = j;\n  return { json: {\n    ...rest,\n    verdict: v || 'REVIEW',\n    decidedBy: v ? 'LLM (' + (model || 'local') + ')' : 'LLM output unreadable – human review',\n    reason: v ? llm.verdict + ': ' + (llm.reason || '') : 'Could not parse LLM answer',\n  } };\n});\n"
+      },
+      "id": "7becdc2c-1c69-5e78-baae-fcef7e9d7bf2",
+      "name": "Apply LLM verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "19b873a4-4b47-548d-b1bf-1c770a32aba5",
+      "name": "All segments",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One row per segment, sorted, with a check against the expected verdict.\nconst rows = $input.all().map(({ json: j }) => {\n  const verdict = j.verdict || j.ruleVerdict;\n  return {\n    id: j.id,\n    verdict,\n    decidedBy: j.decidedBy || 'rules',\n    reason: j.reason,\n    expected: (j.expected || []).join(' / '),\n    matchesExpected: (j.expected || []).includes(verdict),\n    source: j.source,\n    target: j.target,\n  };\n}).sort((a, b) => a.id.localeCompare(b.id));\nreturn rows.map(r => ({ json: r }));\n"
+      },
+      "id": "47c64061-cad4-57cd-b40a-e0fcc6329d84",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst count = v => rows.filter(r => r.verdict === v).length;\nreturn [{ json: {\n  segments: rows.length,\n  OK: count('OK'), FLAG: count('FLAG'), REVIEW: count('REVIEW'),\n  decidedByRules: rows.filter(r => r.decidedBy === 'rules').length,\n  decidedByLLM: rows.filter(r => r.decidedBy !== 'rules').length,\n  matchesExpected: rows.filter(r => r.matchesExpected).length + ' / ' + rows.length,\n  mismatches: rows.filter(r => !r.matchesExpected).map(r => r.id).join(', ') || 'none',\n} }];\n"
+      },
+      "id": "cbcd81c8-4327-5a32-9178-54d4663b4ef0",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Run test set": {
+      "main": [
+        [
+          {
+            "node": "Test segments (EN→HR)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test segments (EN→HR)": {
+      "main": [
+        [
+          {
+            "node": "Rule engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rule engine": {
+      "main": [
+        [
+          {
+            "node": "Ambiguous?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ambiguous?": {
+      "main": [
+        [
+          {
+            "node": "Local LLM (Ollama)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Attach LLM answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All segments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Local LLM (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Attach LLM answer",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Attach LLM answer": {
+      "main": [
+        [
+          {
+            "node": "Apply LLM verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply LLM verdict": {
+      "main": [
+        [
+          {
+            "node": "All segments",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "All segments": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "id": "gcc0000000000001",
+  "tags": []
+}
