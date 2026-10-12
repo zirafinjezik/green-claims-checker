@@ -34,7 +34,7 @@ ollama pull gemma3:12b
 npx n8n
 ```
 
-In n8n (http://localhost:5678): **Workflows → Import from file → `workflow.json`**, then **Execute workflow**. The *Summary* node shows totals and any mismatch against the expected verdicts. To change the model or the Ollama address, edit the *Local LLM (Ollama)* node.
+In n8n (http://localhost:5678): **Workflows → Import from file → `workflow.json`**, then **Execute workflow**. The *Summary* node shows totals and any mismatch against the expected verdicts. To change the model or the Ollama address, edit the *Local LLM (Ollama)* node. It uses `127.0.0.1` rather than `localhost`, because on Windows `localhost` can resolve to IPv6, where Ollama does not listen.
 
 Rules only, without n8n:
 
