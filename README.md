@@ -2,7 +2,7 @@
 
 An n8n workflow that checks English source and Croatian target segments for environmental claims affected by **EU Directive 2024/825** (empowering consumers for the green transition). It flags generic claims ("eco-friendly", "sustainable", "green solution"), climate-neutrality claims and unsupported superlatives, and catches claims that only appear in the translation.
 
-Status: rule engine tested on a 21-segment synthetic test set. Local LLM step tested end to end in n8n 2.x with a mock model; first run with a real model: *[add result here]*.
+Status: tested end to end in self-hosted n8n 2.42 with gemma3:12b running locally in Ollama: **21/21 segments match the expected verdict** (16 decided by rules, 5 by the model), 12 Oct 2026.
 
 ## How it works
 

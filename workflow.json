@@ -74,7 +74,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:11434/api/generate",
+        "url": "http://127.0.0.1:11434/api/generate",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: 'gemma3:12b', prompt: $json.llmPrompt, stream: false, format: 'json', options: { temperature: 0 } }) }}",
