@@ -42,14 +42,30 @@ Rules only, without n8n:
 node tests/run-rules.mjs
 ```
 
+This runs the 21 segments through the rule engine and then checks that every Code node in `workflow.json` still carries exactly the code in `src/`, so an edit in the n8n editor cannot silently drift from the repo.
+
 ## Files
 
 - `workflow.json` – the n8n workflow
 - `src/` – code of each Code node (test set, rule engine, LLM mapping, report)
 - `tests/run-rules.mjs` – runs the rule engine on the test set outside n8n
+- `tests/check-sync.mjs` – verifies `workflow.json` and `src/` are identical
 
 ## Limits
 
 - The test set is synthetic (heating and appliance content), written to cover known traps: "green" as a colour (S01, S20) versus "green solution" (S19), split phrases (S13), claims added in translation (S15, S16).
 - Term lists are a starting point for EN and HR, not a complete legal inventory.
 - The tool supports a reviewer; it is not legal advice. FLAG and REVIEW results need a human decision.
+
+---
+
+## Author
+
+**Natalija Marić** – Localization Engineer and LQA specialist with 14+ years of experience in game localization, technical translation, and quality assurance.
+
+- 🦒 [Žirafin jezik j.d.o.o.](https://zirafinjezik.hr)
+- 💼 [LinkedIn](https://www.linkedin.com/in/natalija-maric-zirafinjezik)
+
+## License
+
+MIT

@@ -11,4 +11,9 @@ for (const { json: j } of out) {
 }
 const amb = out.filter(i => i.json.ruleVerdict === 'AMBIGUOUS').length;
 console.log(`\n${out.length - failed}/${out.length} pass; ${amb} sent to the LLM`);
-process.exit(failed ? 1 : 0);
+if (failed) process.exit(1);
+
+// Second gate: the workflow must embed exactly the code in src/.
+const { status } = await import('child_process').then(cp =>
+  cp.spawnSync(process.execPath, [new URL('check-sync.mjs', import.meta.url).pathname], { stdio: 'inherit' }));
+process.exit(status || 0);
